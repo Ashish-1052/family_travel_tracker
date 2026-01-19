@@ -27,15 +27,22 @@ async function checkVisisted(user_id) {
   });
   return countries;
 }
+
+async function getCurrentUser(currentUserId) {
+  const result = await db.query("SELECT * FROM users WHERE id = ($1)", [currentUserId]);
+  return result.rows[0];
+}
+
 app.get("/", async (req, res) => {
   try {
     const countries = await checkVisisted(currentUserId);
+    const currentUser = await getCurrentUser(currentUserId);
     const users = await db.query("SELECT * FROM users");
     res.render("index.ejs", {
       countries: countries,
       total: countries.length,
       users: users.rows,
-      color: "teal",
+      color: currentUser.color,
     });
   } catch (err) {
     console.log(err);
@@ -67,38 +74,11 @@ app.post("/add", async (req, res) => {
 app.post("/user", async (req, res) => {
   const user_id = req.body.user;
   const add = req.body.add;
-  const query = "SELECT * FROM users JOIN visited_countries ON users.id = visited_countries.user_id WHERE users.id = $1";
-  try {
-    if (add === "new") {
-      res.render("new.ejs");
-    } else {
-      const result = await db.query(query, [user_id]);
-      console.log(result.rows);
-      const data = result.rows[0];
-      currentUserId = user_id;
-      const countries = await checkVisisted(user_id);
-      console.log('countries', countries);
-      console.log('data', data);
-      const users = await db.query("SELECT * FROM users");
-
-      if (data) {
-        res.render("index.ejs", {
-          countries: countries,
-          total: countries.length,
-          users: users.rows,
-          color: data.color,
-        });
-      } else {
-        res.render("index.ejs", {
-          countries: [],
-          total: 0,
-          users: users.rows,
-          color: "transparent",
-        });
-      }
-    }
-  } catch (err) {
-    console.log(err);
+  if (add === "new") {
+    res.render("new.ejs");
+  } else {
+    currentUserId = user_id;
+    res.redirect("/");
   }
 });
 
@@ -109,7 +89,8 @@ app.post("/new", async (req, res) => {
     const input_name = req.body.name;
     const input_color = req.body.color;
     try {
-      await db.query("INSERT INTO users (name, color) VALUES ($1, $2)", [input_name, input_color]);
+      const result = await db.query("INSERT INTO users (name, color) VALUES ($1, $2) RETURNING *", [input_name, input_color]);
+      currentUserId = result.rows[0].id;
       res.redirect("/");
     } catch (err) {
       console.log(err);
